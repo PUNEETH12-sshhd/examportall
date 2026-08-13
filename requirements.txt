@@ -1,0 +1,4 @@
+flask>=3.0.0
+werkzeug>=3.0.0
+gunicorn>=21.2.0
+# smtplib, threading, email are all Python stdlib
