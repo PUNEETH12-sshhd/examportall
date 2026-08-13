@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Result — ExamPortal{% endblock %}
+{% block head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+.print-only { display: none; }
+.marks-card {
+  max-width: 700px; margin: 40px auto;
+  background: var(--bg-card); border-radius: var(--r-xl);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  overflow: hidden; border: 1px solid var(--border);
+}
+.mc-header {
+  background: linear-gradient(135deg, var(--indigo), var(--violet));
+  padding: 32px 36px; text-align: center; color: #fff;
+}
+.mc-logo { font-size: 28px; font-weight: 900; letter-spacing: -1px; margin-bottom: 4px; }
+.mc-title { font-size: 13px; opacity: 0.8; text-transform: uppercase; letter-spacing: 2px; }
+.mc-body { padding: 32px 36px; }
+.mc-exam-name { font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px; }
+.mc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+.mc-field { background: var(--bg-deep); border-radius: var(--r-md); padding: 14px 16px; }
+.mc-field-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+.mc-field-value { font-size: 15px; font-weight: 700; color: #fff; }
+.mc-score-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin: 20px 0; text-align: center;
+}
+.mc-score-box { background: var(--bg-deep); border-radius: var(--r-md); padding: 18px 12px; }
+.mc-score-num { font-size: 28px; font-weight: 900; color: var(--indigo); }
+.mc-score-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+.mc-bar { height: 12px; background: var(--bg-deep); border-radius: 99px; overflow: hidden; margin: 16px 0; }
+.mc-bar-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
+.mc-verdict {
+  text-align: center; padding: 18px; border-radius: var(--r-lg);
+  font-size: 20px; font-weight: 800; margin: 20px 0;
+}
+.mc-verdict.pass { background: rgba(0,230,118,0.1); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+.mc-verdict.fail { background: rgba(255,77,109,0.1); color: var(--red); border: 1px solid rgba(255,77,109,0.3); }
+.mc-footer { text-align: center; padding: 20px 36px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-dim); }
+.action-bar { max-width:700px; margin:0 auto 16px auto; display:flex; gap:12px; justify-content:flex-end; }
+</style>
+{% endblock %}
+{% block body %}
+{% set pct = result.percentage | float %}
+{% set passed = pct >= 40 %}
+{% set deg = (pct * 3.6) | int %}
+
+<div class="no-print action-bar">
+  <a href="{{ url_for('student') }}" class="btn btn-secondary">← Back to Dashboard</a>
+  <button onclick="downloadMarksCard()" class="btn btn-primary">⬇️ Download Marks Card</button>
+</div>
+
+<div class="marks-card" id="marksCard">
+
+  <!-- Header -->
+  <div class="mc-header">
+    <div class="mc-logo">ExamPortal</div>
+    <div class="mc-title">Online Examination Management System</div>
+    <div style="margin-top:12px;font-size:11px;opacity:0.7;">OFFICIAL MARKS CARD</div>
+  </div>
+
+  <!-- Body -->
+  <div class="mc-body">
+    <div class="mc-exam-name">{{ result.subject }}</div>
+    <div style="font-size:13px;color:var(--text-dim);margin-bottom:4px;">Examination Details</div>
+
+    <div class="mc-grid">
+      <div class="mc-field">
+        <div class="mc-field-label">Student Name</div>
+        <div class="mc-field-value">{{ result.student_name }}</div>
+      </div>
+      <div class="mc-field">
+        <div class="mc-field-label">Username</div>
+        <div class="mc-field-value">{{ result.username }}</div>
+      </div>
+      <div class="mc-field">
+        <div class="mc-field-label">Class / Year</div>
+        <div class="mc-field-value">{{ result.student_class }}</div>
+      </div>
+      <div class="mc-field">
+        <div class="mc-field-label">Exam Date &amp; Time</div>
+        <div class="mc-field-value">
+          {% if result.attempt_time %}
+            {{ result.attempt_time }}
+          {% else %}N/A{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Score breakdown -->
+    <div class="mc-score-row">
+      <div class="mc-score-box">
+        <div class="mc-score-num" style="color:var(--indigo);">{{ result.score }}</div>
+        <div class="mc-score-label">Correct</div>
+      </div>
+      <div class="mc-score-box">
+        <div class="mc-score-num" style="color:var(--red);">{{ result.total - result.score }}</div>
+        <div class="mc-score-label">Wrong</div>
+      </div>
+      <div class="mc-score-box">
+        <div class="mc-score-num">{{ result.total }}</div>
+        <div class="mc-score-label">Total Qs</div>
+      </div>
+      <div class="mc-score-box">
+        <div class="mc-score-num" style="color:{{ 'var(--green)' if passed else 'var(--red)' }};">{{ pct }}%</div>
+        <div class="mc-score-label">Score %</div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="mc-bar">
+      <div class="mc-bar-fill" id="barFill" style="width:0%;background:{{ 'linear-gradient(90deg,var(--indigo),var(--teal))' if passed else 'linear-gradient(90deg,var(--red),#ff8099)' }};"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:8px;">
+      <span>0%</span><span>Pass Mark: 40%</span><span>100%</span>
+    </div>
+
+    <!-- Verdict -->
+    <div class="mc-verdict {{ 'pass' if passed else 'fail' }}">
+      {% if passed %}✔ PASSED — Congratulations!{% else %}✘ FAILED — Better luck next time{% endif %}
+    </div>
+
+    <!-- Grade -->
+    <div class="mc-grid">
+      <div class="mc-field">
+        <div class="mc-field-label">Grade</div>
+        <div class="mc-field-value" style="font-size:22px;">
+          {% if pct >= 90 %}A+
+          {% elif pct >= 80 %}A
+          {% elif pct >= 70 %}B+
+          {% elif pct >= 60 %}B
+          {% elif pct >= 50 %}C
+          {% elif pct >= 40 %}D
+          {% else %}F{% endif %}
+        </div>
+      </div>
+      <div class="mc-field">
+        <div class="mc-field-label">Performance</div>
+        <div class="mc-field-value">
+          {% if pct >= 90 %}Excellent
+          {% elif pct >= 75 %}Very Good
+          {% elif pct >= 60 %}Good
+          {% elif pct >= 40 %}Average
+          {% else %}Below Average{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="mc-footer">
+    <div style="margin-bottom:4px;">This is a computer-generated marks card from ExamPortal.</div>
+    <div>Generated on: <strong id="genTime"></strong> &nbsp;|&nbsp; Exam: {{ result.subject }}</div>
+  </div>
+</div>
+
+<div class="no-print" style="max-width:700px;margin:0 auto 40px auto;text-align:center;">
+  <button onclick="downloadMarksCard()" class="btn btn-primary btn-lg">⬇️ Download Marks Card (PDF)</button>
+  <a href="{{ url_for('student') }}" class="btn btn-secondary btn-lg" style="margin-left:12px;">← Back to Dashboard</a>
+</div>
+
+<script>
+document.getElementById('genTime').textContent=new Date().toLocaleString();
+setTimeout(()=>{document.getElementById('barFill').style.width='{{ pct }}%';},300);
+
+function downloadMarksCard() {
+  const element = document.getElementById('marksCard');
+  const studentName = '{{ result.student_name | replace(" ", "_") }}';
+  const subject = '{{ result.subject | replace(" ", "_") }}';
+  const filename = `MarksCard_${studentName}_${subject}.pdf`;
+
+  const opt = {
+    margin:       [10, 10, 10, 10],
+    filename:     filename,
+    image:        { type: 'jpeg', quality: 0.98 },
+    html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#1a1a2e' },
+    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  const btn = event.currentTarget;
+  btn.textContent = '⏳ Generating PDF...';
+  btn.disabled = true;
+
+  html2pdf().set(opt).from(element).save().then(() => {
+    btn.innerHTML = '⬇️ Download Marks Card' + (btn.classList.contains('btn-lg') ? ' (PDF)' : '');
+    btn.disabled = false;
+  });
+}
+</script>
+{% endblock %}

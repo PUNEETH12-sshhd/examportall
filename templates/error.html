@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Error — ExamPortal{% endblock %}
+{% block body %}
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;">
+  <div class="card" style="max-width:480px;text-align:center;padding:48px;">
+    <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+    <h2 style="font-size:20px;font-weight:800;color:#fff;margin-bottom:12px;">Access Denied</h2>
+    <p style="color:var(--text-dim);margin-bottom:24px;">{{ msg }}</p>
+    <a href="{{ url_for('student') }}" class="btn btn-primary">← Back to Dashboard</a>
+  </div>
+</div>
+{% endblock %}

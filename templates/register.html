@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Register — ExamPortal{% endblock %}
+{% block head %}
+<style>
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+.star{position:absolute;background:#fff;border-radius:50%;animation:tw var(--d,3s) var(--dl,0s) infinite alternate;}
+@keyframes tw{from{opacity:.05;transform:scale(1);}to{opacity:.5;transform:scale(1.6);}}
+</style>
+{% endblock %}
+{% block body %}
+<div class="stars" id="stars"></div>
+<div class="auth-bg">
+  <div class="auth-card">
+    <div class="auth-logo">Exam<span>Portal</span></div>
+    <p class="auth-sub">Create your account to get started</p>
+    {% if error %}<div class="alert alert-error">⚠️ {{ error }}</div>{% endif %}
+    {% if success %}<div class="alert alert-success">✅ {{ success }}</div>{% endif %}
+    <form method="POST">
+      <div class="form-group"><label>Full Name</label><input type="text" name="name" placeholder="Your full name" required></div>
+      <div class="form-group"><label>Class / Year</label><input type="text" name="class" placeholder="e.g. BCA 3rd Year" required></div>
+      <div class="form-group"><label>Username</label><input type="text" name="username" placeholder="Choose a username" required></div>
+      <div class="form-group"><label>Password</label>
+        <div style="position:relative;">
+          <input type="password" name="password" id="regPassword" placeholder="Create a password" required style="padding-right:44px;width:100%;box-sizing:border-box;">
+          <button type="button" onclick="togglePwd('regPassword','regEye')" tabindex="-1"
+            style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--text-dim);padding:4px;line-height:1;"
+            title="Show/Hide Password">
+            <span id="regEye">👁️</span>
+          </button>
+        </div>
+      </div>
+      <div class="form-group"><label>Email Address</label><input type="email" name="email" placeholder="your@email.com" required></div>
+      <div class="form-group"><label>Role</label>
+        <select name="role" required>
+          <option value="">Select role…</option>
+          <option value="organizer">Organizer / Admin</option>
+          <option value="student">Student</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Create Account</button>
+    </form>
+    <div class="auth-footer">Already have an account? <a href="{{ url_for('index') }}">Sign in</a></div>
+  </div>
+</div>
+<script>
+function togglePwd(inputId, eyeId) {
+  const inp = document.getElementById(inputId);
+  const eye = document.getElementById(eyeId);
+  if (inp.type === 'password') { inp.type = 'text'; eye.textContent = '🙈'; }
+  else { inp.type = 'password'; eye.textContent = '👁️'; }
+}
+const s=document.getElementById('stars');
+for(let i=0;i<70;i++){const el=document.createElement('div');el.className='star';const sz=Math.random()*2+.5;el.style.cssText=`width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--dl:${(Math.random()*3).toFixed(1)}s;`;s.appendChild(el);}
+</script>
+{% endblock %}

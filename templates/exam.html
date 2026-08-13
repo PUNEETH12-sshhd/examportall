@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}{{ exam.subject }} — ExamPortal{% endblock %}
+{% block body %}
+<div class="exam-wrapper">
+  <div class="exam-topbar">
+    <div>
+      <div style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Online Exam</div>
+      <h2>{{ exam.subject }}</h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="saveStatus" style="font-size:11px;color:var(--text-dim);transition:color .3s;"></span>
+      <div id="timer" class="timer-pill">Loading…</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <span class="badge badge-normal">📋 {{ questions|length }} Questions</span>
+    <span class="badge badge-upcoming">⏱️ {{ exam.duration }} Minutes</span>
+    <span class="badge badge-live">🔀 Questions Shuffled</span>
+    <span class="badge" style="background:rgba(255,77,109,0.15);color:#ff8099;">🔴 Do not switch tabs</span>
+    <span class="badge" id="camBadge" style="background:rgba(255,165,0,0.15);color:#ffb347;">📷 Cam: Starting…</span>
+  </div>
+
+  <div style="background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);border-radius:var(--r-md);padding:12px 16px;margin-bottom:12px;font-size:13px;color:#ff8099;">
+    ⚠️ <strong>Exam Security Active:</strong> Tab switching will <strong>immediately auto-submit</strong> your exam. Your webcam is being monitored for malpractice detection.
+  </div>
+
+  <div id="networkBanner" style="display:none;background:rgba(255,165,0,0.12);border:1px solid rgba(255,165,0,0.35);border-radius:var(--r-md);padding:12px 16px;margin-bottom:16px;font-size:13px;color:#ffb347;">
+    📡 <strong>Connection issue detected.</strong> Your answers are saved locally. The exam will <strong>not</strong> be submitted — keep working and we'll sync when you're back online.
+  </div>
+
+  <div id="malpracticeBanner" style="display:none;background:rgba(255,77,109,0.12);border:1px solid rgba(255,77,109,0.4);border-radius:var(--r-md);padding:12px 16px;margin-bottom:16px;font-size:13px;color:#ff6b6b;transition:all 0.3s;">
+    🚨 <strong id="malpracticeMsg">Malpractice detected!</strong> This incident has been recorded.
+  </div>
+
+  <!-- Webcam Proctoring Panel -->
+  <div id="webcamPanel" style="position:fixed;bottom:20px;right:20px;z-index:1000;background:#1a1a2e;border:2px solid #333;border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.6);width:200px;">
+    <div style="background:rgba(255,77,109,0.2);padding:6px 10px;font-size:11px;color:#ff8099;font-weight:700;display:flex;justify-content:space-between;align-items:center;">
+      <span>🎥 PROCTORING</span>
+      <span id="faceStatus" style="color:#ffb347;font-size:16px;">●</span>
+    </div>
+    <div style="position:relative;background:#000;">
+      <video id="webcamVideo" autoplay muted playsinline style="width:200px;height:150px;object-fit:cover;display:block;transform:scaleX(-1);"></video>
+      <canvas id="overlayCanvas" style="position:absolute;top:0;left:0;width:200px;height:150px;transform:scaleX(-1);pointer-events:none;"></canvas>
+    </div>
+    <div id="camStatus" style="padding:5px 10px;font-size:10px;color:#888;text-align:center;background:#111;">Initializing…</div>
+    <div id="flagCount" style="padding:3px 10px 6px;font-size:10px;color:#ff8099;text-align:center;background:#111;">Flags: 0</div>
+  </div>
+
+  <!-- Tab-switch overlay -->
+  <div id="tabWarning" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--bg-card);border:2px solid var(--red);border-radius:var(--r-xl);padding:40px;max-width:440px;text-align:center;">
+      <div style="font-size:48px;margin-bottom:14px;">🚨</div>
+      <h3 style="font-family:var(--font-display);font-size:22px;color:var(--red);margin-bottom:10px;">Tab Switch Detected!</h3>
+      <p style="color:var(--text-dim);font-size:14px;margin-bottom:8px;">Your exam is being <strong style="color:var(--red);">automatically submitted</strong>.</p>
+    </div>
+  </div>
+
+  <!-- Camera Permission Modal -->
+  <div id="camModal" style="display:flex;position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:8888;align-items:center;justify-content:center;">
+    <div style="background:#1a1a2e;border:2px solid #6c63ff;border-radius:20px;padding:40px;max-width:460px;text-align:center;box-shadow:0 16px 64px rgba(0,0,0,.7);">
+      <div style="font-size:52px;margin-bottom:14px;">📷</div>
+      <h3 style="font-size:22px;color:#fff;margin-bottom:10px;">Webcam Required</h3>
+      <p style="color:#888;font-size:14px;margin-bottom:8px;">This exam uses AI-based proctoring to monitor for malpractice:</p>
+      <ul style="color:#aaa;font-size:13px;text-align:left;margin:12px 0 20px;line-height:2;">
+        <li>🚫 No face detected in frame</li>
+        <li>👥 Multiple faces in frame</li>
+        <li>👁️ Looking away from screen</li>
+        <li>🔄 Tab / window switching</li>
+      </ul>
+      <p style="color:#666;font-size:12px;margin-bottom:20px;">All incidents are logged with timestamps and snapshots for the examiner.</p>
+      <div id="camError" style="display:none;color:#ff6b6b;font-size:13px;margin-bottom:14px;padding:10px;background:rgba(255,77,109,0.1);border-radius:8px;"></div>
+      <button id="allowCamBtn" onclick="startWebcam()" style="background:linear-gradient(135deg,#6c63ff,#4facfe);color:#fff;border:none;padding:14px 32px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;">Allow Camera & Start Exam</button>
+    </div>
+  </div>
+
+  <form method="POST" action="/exam" id="examForm">
+    <input type="hidden" name="exam_id" value="{{ exam.id }}">
+    <input type="hidden" name="submit_exam" value="1">
+
+    {% for i, q in questions | enumerate %}
+    <div class="question-card" id="qcard-{{ loop.index }}">
+      <div class="q-num">Question {{ loop.index }} of {{ questions|length }}</div>
+      <div class="q-text">{{ q.question_text }}</div>
+      {% for opt_num in [1,2,3,4] %}
+      <label class="option-label">
+        <input type="radio" name="answer_{{ q.id }}" value="{{ opt_num }}" data-qid="{{ q.id }}">
+        {{ q['option' ~ opt_num] }}
+      </label>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-bottom:80px;">
+      <div style="font-size:13px;color:var(--text-dim);" id="answerCount">0 / {{ questions|length }} answered</div>
+      <button type="submit" class="btn btn-success btn-lg" id="submitBtn">✅ Submit Exam</button>
+    </div>
+  </form>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<script>
+const EXAM_ID      = {{ exam.id }};
+const examEndTime  = new Date("{{ end_time }}").getTime();
+const timerEl      = document.getElementById('timer');
+const totalQ       = {{ questions|length }};
+const saveStatusEl = document.getElementById('saveStatus');
+const networkBanner= document.getElementById('networkBanner');
+const DRAFT_KEY    = 'exam_draft_' + EXAM_ID;
+
+// ─── Answer helpers ───────────────────────────────────────────────────────────
+function collectAnswers() {
+  const answers = {};
+  document.querySelectorAll('input[type=radio]:checked').forEach(r => { answers[r.name] = r.value; });
+  return answers;
+}
+function updateAnswerCount() {
+  const answered = new Set([...document.querySelectorAll('input[type=radio]:checked')].map(r => r.name)).size;
+  document.getElementById('answerCount').textContent = answered + ' / ' + totalQ + ' answered';
+}
+function saveToSession(a) { try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(a)); } catch(_) {} }
+
+// Restore session
+(function() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY); if (!raw) return;
+    const a = JSON.parse(raw);
+    Object.keys(a).forEach(n => { const r = document.querySelector('input[name="'+n+'"][value="'+a[n]+'"]'); if(r) r.checked=true; });
+    updateAnswerCount();
+  } catch(_) {}
+})();
+
+(async function() {
+  try {
+    const res = await fetch('/load-draft?exam_id='+EXAM_ID); if(!res.ok) return;
+    const data = await res.json(); if(!data.ok||!data.answers) return;
+    const keys = Object.keys(data.answers); if(!keys.length) return;
+    keys.forEach(n => { const r = document.querySelector('input[name="'+n+'"][value="'+data.answers[n]+'"]'); if(r) r.checked=true; });
+    updateAnswerCount(); saveToSession(data.answers);
+    saveStatusEl.textContent='✔ Draft restored'; saveStatusEl.style.color='#6fcf97';
+    setTimeout(()=>{saveStatusEl.textContent='';},2500);
+  } catch(_) {}
+})();
+
+async function saveDraft() {
+  const a = collectAnswers(); saveToSession(a);
+  try {
+    const res = await fetch('/save-draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({exam_id:EXAM_ID,answers:a})});
+    if(res.ok){networkBanner.style.display='none';saveStatusEl.textContent='✔ Saved';saveStatusEl.style.color='#6fcf97';setTimeout(()=>{saveStatusEl.textContent='';},2000);}
+  } catch(_) {networkBanner.style.display='block';saveStatusEl.textContent='⚠ Offline';saveStatusEl.style.color='#ffb347';}
+}
+setInterval(saveDraft, 30000);
+document.querySelectorAll('input[type=radio]').forEach(r=>r.addEventListener('change',()=>{updateAnswerCount();saveDraft();}));
+
+// ─── Timer ────────────────────────────────────────────────────────────────────
+let timerExpired = false;
+(function tick() {
+  const dist = examEndTime - Date.now();
+  if (dist <= 0) {
+    timerEl.innerHTML="Time's Up!";
+    if(!timerExpired){timerExpired=true;const ri=document.createElement('input');ri.type='hidden';ri.name='auto_submit_reason';ri.value='timer_expired';document.getElementById('examForm').appendChild(ri);document.getElementById('examForm').submit();}
+    return;
+  }
+  const m=Math.floor((dist%(1000*60*60))/(1000*60)),s=Math.floor((dist%(1000*60))/1000);
+  timerEl.innerHTML='⏱ '+m+'m '+s+'s';
+  if(dist<300000)timerEl.classList.add('danger');
+  setTimeout(tick,1000);
+})();
+
+document.getElementById('examForm').addEventListener('submit',function(e){
+  if(tabSwitchSubmitted||timerExpired)return;
+  const answered=new Set([...document.querySelectorAll('input[type=radio]:checked')].map(i=>i.name)).size;
+  if(answered<totalQ){e.preventDefault();if(confirm('You have only answered '+answered+' of '+totalQ+' questions. Submit anyway?'))this.submit();}
+});
+
+// ─── Tab switch ───────────────────────────────────────────────────────────────
+let tabSwitchSubmitted = false;
+function autoSubmitExam(reason) {
+  if(tabSwitchSubmitted||timerExpired)return;
+  tabSwitchSubmitted=true;
+  document.getElementById('tabWarning').style.display='flex';
+  logMalpractice('tab_switch',reason,'');
+  const ri=document.createElement('input');ri.type='hidden';ri.name='auto_submit_reason';ri.value=reason;
+  document.getElementById('examForm').appendChild(ri);
+  setTimeout(()=>document.getElementById('examForm').submit(),1500);
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden)autoSubmitExam('tab_switch'); });
+window.addEventListener('blur',()=>autoSubmitExam('window_blur'));
+
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&['c','v','a','u'].includes(e.key.toLowerCase()))e.preventDefault(); });
+window.addEventListener('beforeunload',e=>{e.preventDefault();e.returnValue='';});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  WEBCAM PROCTORING  
+// ═══════════════════════════════════════════════════════════════════════════════
+const video      = document.getElementById('webcamVideo');
+const overlay    = document.getElementById('overlayCanvas');
+const ctx        = overlay.getContext('2d');
+const camBadge   = document.getElementById('camBadge');
+const camStatus  = document.getElementById('camStatus');
+const faceStatus = document.getElementById('faceStatus');
+const flagCountEl= document.getElementById('flagCount');
+const camModal   = document.getElementById('camModal');
+
+let modelsLoaded=false, consecutiveNoFace=0, consecutiveMultiFace=0, lookAwayFrames=0;
+let malpracticeCount=0, lastSnapshotTime=0;
+
+const NO_FACE_THRESHOLD=5, MULTI_FACE_THRESHOLD=3, LOOK_AWAY_THRESHOLD=8;
+const MODEL_URL='https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+
+async function loadModels() {
+  camStatus.textContent='Loading AI models…';
+  try {
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    modelsLoaded=true;
+    camStatus.textContent='AI ready';
+    return true;
+  } catch(e) {
+    camStatus.textContent='AI unavailable – basic mode';
+    return false;
+  }
+}
+
+function captureSnapshot() {
+  try {
+    const s=document.createElement('canvas'); s.width=video.videoWidth||320; s.height=video.videoHeight||240;
+    s.getContext('2d').drawImage(video,0,0);
+    return s.toDataURL('image/jpeg',0.5).split(',')[1];
+  } catch(_){ return ''; }
+}
+
+const MALP_MSGS = {
+  no_face:       '⚠️ No face detected — please stay in front of the camera.',
+  multiple_faces:'🚨 Multiple faces detected — only one person allowed.',
+  look_away:     '👁️ Please look at the screen.',
+  camera_denied: '🚫 Camera access was denied — this has been recorded.',
+  tab_switch:    '🔴 Tab switch detected and recorded.',
+};
+
+async function logMalpractice(eventType, detail, withSnapshot) {
+  malpracticeCount++;
+  flagCountEl.textContent = 'Flags: ' + malpracticeCount;
+  const banner = document.getElementById('malpracticeBanner');
+  document.getElementById('malpracticeMsg').textContent = MALP_MSGS[eventType] || '⚠️ Malpractice detected!';
+  banner.style.display='block';
+  setTimeout(()=>{ banner.style.display='none'; }, 5000);
+  const now=Date.now();
+  let snap='';
+  if(withSnapshot && (now-lastSnapshotTime>10000)){ snap=captureSnapshot(); lastSnapshotTime=now; }
+  try {
+    await fetch('/log-malpractice',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({exam_id:EXAM_ID,event_type:eventType,detail:detail,snapshot:snap})
+    });
+  } catch(_) {}
+}
+
+async function startWebcam() {
+  const btn=document.getElementById('allowCamBtn');
+  btn.disabled=true; btn.textContent='Requesting camera…';
+  try {
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'},audio:false});
+    video.srcObject=stream;
+    await new Promise(res=>video.addEventListener('loadedmetadata',res,{once:true}));
+    camModal.style.display='none';
+    camBadge.innerHTML='📷 Cam: <span style="color:#6bffb8">Active</span>';
+    camBadge.style.background='rgba(99,255,132,0.12)'; camBadge.style.color='#6bffb8';
+    await loadModels();
+    if(modelsLoaded) startFaceDetection();
+    else camStatus.textContent='Streaming (no AI)';
+  } catch(err) {
+    const errEl=document.getElementById('camError');
+    errEl.style.display='block';
+    errEl.textContent='⚠ '+err.message+'. Please allow camera and try again.';
+    btn.disabled=false; btn.textContent='Try Again';
+    logMalpractice('camera_denied',err.message,false);
+  }
+}
+
+function startFaceDetection() {
+  overlay.width=video.videoWidth||320; overlay.height=video.videoHeight||240;
+  setInterval(async()=>{
+    if(!video.srcObject||video.paused) return;
+    try {
+      const dets=await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({inputSize:224,scoreThreshold:0.45}));
+      ctx.clearRect(0,0,overlay.width,overlay.height);
+      const n=dets.length;
+
+      dets.forEach((det,i)=>{
+        const b=det.box;
+        const color=n===1?'#6bffb8':'#ff6b6b';
+        ctx.strokeStyle=color; ctx.lineWidth=2;
+        ctx.strokeRect(b.x,b.y,b.width,b.height);
+        ctx.fillStyle=color; ctx.font='11px sans-serif';
+        ctx.fillText(n===1?'✓ You':'⚠ Person '+(i+1), b.x+2, b.y-4);
+      });
+
+      if(n===1){
+        faceStatus.style.color='#6bffb8'; camStatus.textContent='✔ Face OK';
+        consecutiveNoFace=0; consecutiveMultiFace=0;
+        // Gaze check – face should be roughly centred
+        const b=dets[0].box;
+        const cx=b.x+b.width/2, cy=b.y+b.height/2;
+        const vw=overlay.width, vh=overlay.height;
+        if(cx<vw*0.12||cx>vw*0.88||cy<vh*0.08||cy>vh*0.92){
+          lookAwayFrames++;
+          if(lookAwayFrames>=LOOK_AWAY_THRESHOLD){ lookAwayFrames=0; logMalpractice('look_away','Face at screen edge',true); }
+        } else { lookAwayFrames=Math.max(0,lookAwayFrames-1); }
+      } else if(n===0){
+        faceStatus.style.color='#ffb347'; camStatus.textContent='⚠ No face';
+        consecutiveNoFace++; consecutiveMultiFace=0; lookAwayFrames=0;
+        if(consecutiveNoFace===NO_FACE_THRESHOLD){ logMalpractice('no_face','No face for ~5 sec',true); }
+        if(consecutiveNoFace>NO_FACE_THRESHOLD && consecutiveNoFace%10===0) logMalpractice('no_face','Still no face',true);
+      } else {
+        faceStatus.style.color='#ff6b6b'; camStatus.textContent='🚨 '+n+' faces!';
+        consecutiveMultiFace++; consecutiveNoFace=0; lookAwayFrames=0;
+        if(consecutiveMultiFace===MULTI_FACE_THRESHOLD){ logMalpractice('multiple_faces',n+' faces in frame',true); }
+        if(consecutiveMultiFace>MULTI_FACE_THRESHOLD && consecutiveMultiFace%10===0) logMalpractice('multiple_faces',n+' faces still present',true);
+      }
+    } catch(_) {}
+  }, 1000);
+}
+
+window.addEventListener('load',()=>setTimeout(startWebcam,600));
+</script>
+{% endblock %}

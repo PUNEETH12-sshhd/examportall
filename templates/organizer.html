@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+{% block title %}Organizer Dashboard — ExamPortal{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+{% block body %}
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">Exam<span>Portal</span></div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="create">📝 Create Exam</a>
+      <a href="#" class="nav-item" data-tab="my-exams">📋 My Exams</a>
+      <a href="#" class="nav-item" data-tab="materials">📁 Study Materials</a>
+      <a href="#" class="nav-item" data-tab="analytics">📊 Analytics</a>
+      <a href="#" class="nav-item monitor-nav-item" data-tab="exam-monitor" style="position:relative;">🎯 Exam Monitor <span id="monitorBadge" style="display:none;position:absolute;top:6px;right:10px;background:#ff4d6d;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;animation:pulse 1.2s infinite;"></span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">👤 {{ session.username }}</div>
+      <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm btn-block">Sign Out</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <!-- CREATE EXAM TAB -->
+    <section id="create" class="tab-content active">
+      <div class="section-head">
+        <h2>📝 Create New Exam</h2>
+        <p>Set up an exam with questions, duration and optional schedule.</p>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon">📋</div><div class="stat-num">{{ exams|length }}</div><div class="stat-label">My Exams</div></div>
+        <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-num">{{ total_students }}</div><div class="stat-label">Students</div></div>
+        <div class="stat-card"><div class="stat-icon">📊</div><div class="stat-num">{{ total_results }}</div><div class="stat-label">Attempts</div></div>
+      </div>
+      <div id="formAlert" style="display:none;" class="alert"></div>
+      <form id="examForm">
+        <div class="card">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label>Subject / Exam Title *</label>
+              <input type="text" id="examSubject" placeholder="e.g. Mathematics Unit 3" required>
+            </div>
+            <div class="form-group">
+              <label>Duration (minutes) *</label>
+              <input type="number" id="examDuration" placeholder="e.g. 60" min="1" required>
+            </div>
+            <div class="form-group">
+              <label>Exam Date <span style="color:var(--text-muted);font-weight:400;">(optional)</span></label>
+              <input type="date" id="examDate">
+            </div>
+            <div class="form-group"><label>Start Time</label><input type="time" id="startTime"></div>
+            <div class="form-group"><label>End Time</label><input type="time" id="endTime"></div>
+          </div>
+          <div class="info-box">💡 <strong>Normal</strong> = no date/time, can be taken anytime. &nbsp;🗓️ <strong>Scheduled</strong> = date + time window only.</div>
+        </div>
+        <div class="section-head" style="margin-top:24px;"><h2 style="font-size:18px;">Questions</h2></div>
+        <div id="questionsContainer"></div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button type="button" id="addQuestionBtn" class="btn btn-secondary">+ Add Question</button>
+          <button type="submit" class="btn btn-primary">💾 Save Exam</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- MY EXAMS TAB -->
+    <section id="my-exams" class="tab-content">
+      <div class="section-head"><h2>📋 My Exams</h2></div>
+      <div id="examList"></div>
+    </section>
+
+    <!-- MATERIALS TAB -->
+    <section id="materials" class="tab-content">
+      <div class="section-head">
+        <h2>📁 Study Materials</h2>
+        <p>Upload files by category for students to access.</p>
+      </div>
+      <div class="card">
+        <div id="uploadAlert" style="display:none;" class="alert"></div>
+        <form id="materialForm" enctype="multipart/form-data">
+          <div class="form-group"><label>Material Title *</label><input type="text" id="materialTitle" placeholder="e.g. Chapter 3 Notes" required></div>
+          <div class="form-group">
+            <label>Category *</label>
+            <select id="materialCategory" required>
+              {% for cat in categories %}
+              <option value="{{ cat }}">{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group"><label>File *</label><input type="file" id="materialFile" required></div>
+          <button type="submit" class="btn btn-primary">📤 Upload Material</button>
+        </form>
+      </div>
+      <div id="materialList" style="margin-top:18px;"></div>
+    </section>
+
+    <!-- ANALYTICS TAB -->
+    <section id="analytics" class="tab-content">
+      <div class="section-head"><h2>📊 Analytics</h2></div>
+      <div id="analyticsList">
+        {% for exam in exams %}
+        <div class="exam-item">
+          <div>
+            <div class="exam-item-title">{{ exam.subject }}</div>
+            <div class="exam-item-meta">{{ exam.questions|length }} questions · {{ exam.duration }} min</div>
+          </div>
+          <a href="{{ url_for('analytics', exam_id=exam.id) }}" class="btn btn-secondary btn-sm">📊 View Performance</a>
+        </div>
+        {% else %}
+        <div class="empty-state"><span class="es-icon">📊</span><p>Create exams to see analytics.</p></div>
+        {% endfor %}
+      </div>
+    </section>
+    <!-- EXAM MONITOR TAB -->
+    <section id="exam-monitor" class="tab-content">
+      <div class="section-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="display:flex;align-items:center;gap:10px;">🎯 Exam Monitor
+            <span id="liveIndicator" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;background:rgba(99,255,132,0.1);color:#6bffb8;border:1px solid rgba(99,255,132,0.25);padding:3px 10px;border-radius:20px;font-weight:600;">
+              <span style="width:7px;height:7px;background:#6bffb8;border-radius:50%;animation:pulse 1.2s infinite;display:inline-block;"></span>LIVE
+            </span>
+          </h2>
+          <p>Real-time malpractice alerts from student webcams. Auto-refreshes every 5 seconds.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <select id="monitorExamFilter" style="background:var(--bg-card);color:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:13px;">
+            <option value="">All Exams</option>
+          </select>
+          <button onclick="clearMonitorAlerts()" style="background:rgba(255,77,109,0.12);color:#ff6b6b;border:1px solid rgba(255,77,109,0.25);padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;">🗑 Clear Alerts</button>
+          <span id="lastRefreshTime" style="font-size:12px;color:var(--text-dim);"></span>
+        </div>
+      </div>
+
+      <!-- Summary stats row -->
+      <div id="monitorStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:22px;"></div>
+
+      <!-- Flagged students leaderboard -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:22px;" id="monitorSplitView">
+        <!-- Left: Flagged students -->
+        <div>
+          <div style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:600;">🚨 Flagged Students</div>
+          <div id="flaggedStudentsList" style="display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;"></div>
+        </div>
+        <!-- Right: Live notification feed -->
+        <div>
+          <div style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:600;">📡 Live Alerts Feed</div>
+          <div id="liveAlertFeed" style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- Detailed log table -->
+      <div>
+        <div style="font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:600;">📋 Full Incident Log</div>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;" id="monitorTable">
+              <thead>
+                <tr style="border-bottom:1px solid var(--border);background:rgba(108,99,255,0.06);">
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">TIME</th>
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">STUDENT</th>
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">CLASS</th>
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">EXAM</th>
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">EVENT</th>
+                  <th style="padding:12px 16px;text-align:left;color:var(--text-dim);font-weight:600;font-size:12px;">DETAIL</th>
+                  <th style="padding:12px 16px;text-align:center;color:var(--text-dim);font-weight:600;font-size:12px;">SNAPSHOT</th>
+                </tr>
+              </thead>
+              <tbody id="monitorTableBody">
+                <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-dim);">Loading incidents…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast container -->
+      <div id="monitorToastContainer" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none;"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const organizerExams = {{ exams | tojson }};
+const organizerMaterials = {{ materials | tojson }};
+const qContainer = document.getElementById('questionsContainer');
+
+// Tab navigation is handled in the monitor section below
+
+// ── Question builder ──
+function createQuestionInput(q = {}) {
+  const div = document.createElement('div');
+  div.className = 'question-block';
+  div.innerHTML = `
+    <div class="q-full form-group"><label>Question *</label><input class="qText" placeholder="Enter the question…" value="${q.text||''}" required></div>
+    <div class="form-group"><label>Option 1</label><input class="opt1" placeholder="Option 1" value="${q.options?q.options[0]:''}" required></div>
+    <div class="form-group"><label>Option 2</label><input class="opt2" placeholder="Option 2" value="${q.options?q.options[1]:''}" required></div>
+    <div class="form-group"><label>Option 3</label><input class="opt3" placeholder="Option 3" value="${q.options?q.options[2]:''}" required></div>
+    <div class="form-group"><label>Option 4</label><input class="opt4" placeholder="Option 4" value="${q.options?q.options[3]:''}" required></div>
+    <div class="form-group q-full"><label>Correct Option</label>
+      <select class="correct">
+        <option value="">Select correct answer…</option>
+        ${[1,2,3,4].map(i=>`<option value="${i}" ${q.correct==i?'selected':''}>Option ${i}</option>`).join('')}
+      </select>
+    </div>
+    <button type="button" class="delete-btn">✕ Remove</button>`;
+  div.querySelector('.delete-btn').onclick = () => div.remove();
+  qContainer.appendChild(div);
+}
+
+document.getElementById('addQuestionBtn').onclick = () => createQuestionInput();
+
+// ── Save Exam ──
+document.getElementById('examForm').onsubmit = function(e) {
+  e.preventDefault();
+  const subject = document.getElementById('examSubject').value.trim();
+  const duration = parseInt(document.getElementById('examDuration').value);
+  const exam_date = document.getElementById('examDate').value;
+  const start_time = document.getElementById('startTime').value;
+  const end_time = document.getElementById('endTime').value;
+  const questions = [];
+  document.querySelectorAll('.question-block').forEach(q => {
+    const correct = parseInt(q.querySelector('.correct').value);
+    if(!q.querySelector('.qText').value.trim() || !correct) return;
+    questions.push({
+      text: q.querySelector('.qText').value,
+      options: [q.querySelector('.opt1').value, q.querySelector('.opt2').value, q.querySelector('.opt3').value, q.querySelector('.opt4').value],
+      correct
+    });
+  });
+  if(!questions.length) { showAlert('formAlert','Please add at least one question.','error'); return; }
+  const fd = new FormData();
+  fd.append('subject', subject); fd.append('duration', duration);
+  fd.append('exam_date', exam_date); fd.append('start_time', start_time); fd.append('end_time', end_time);
+  fd.append('questions', JSON.stringify(questions));
+  fetch('/organizer/save_exam', {method:'POST', body:fd})
+    .then(r=>r.json()).then(d=>{
+      if(d.status==='success'){showAlert('formAlert','✅ Exam saved!','success');this.reset();qContainer.innerHTML='';setTimeout(()=>location.reload(),1400);}
+      else showAlert('formAlert','❌ Failed to save exam.','error');
+    });
+};
+
+// ── Load Exams ──
+function loadExams() {
+  const list = document.getElementById('examList');
+  if(!organizerExams.length){list.innerHTML='<div class="empty-state"><span class="es-icon">📭</span><p>No exams yet.</p></div>';return;}
+  list.innerHTML='';
+  organizerExams.forEach(e=>{
+    const isNormal=!(e.exam_date&&e.start_time&&e.end_time);
+    const qCount=e.questions?e.questions.length:0;
+    const meta=isNormal?`Normal · ${e.duration} min · ${qCount} questions`:`Scheduled · ${e.exam_date} · ${e.start_time}–${e.end_time} · ${e.duration} min · ${qCount} q`;
+    list.innerHTML+=`
+    <div class="exam-item">
+      <div style="flex:1;">
+        <div class="exam-item-title">${e.subject}</div>
+        <div class="exam-item-meta">${meta}</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="/analytics?exam_id=${e.id}" class="btn btn-secondary btn-sm">📊 Analytics</a>
+        <button class="btn btn-danger btn-sm delExam" data-id="${e.id}">🗑️ Delete</button>
+      </div>
+    </div>`;
+  });
+  document.querySelectorAll('.delExam').forEach(btn=>{
+    btn.onclick=()=>{
+      if(confirm('Delete this exam and all its results?')){
+        const fd=new FormData();fd.append('id',btn.dataset.id);
+        fetch('/organizer/delete_exam',{method:'POST',body:fd}).then(()=>location.reload());
+      }
+    };
+  });
+}
+loadExams();
+
+// ── Load Materials grouped by category ──
+function loadMaterials(){
+  const list=document.getElementById('materialList');
+  if(!organizerMaterials.length){list.innerHTML='<div class="empty-state"><span class="es-icon">📁</span><p>No materials yet.</p></div>';return;}
+  const byCat={};
+  organizerMaterials.forEach(m=>{const c=m.category||'Other';if(!byCat[c])byCat[c]=[];byCat[c].push(m);});
+  list.innerHTML='';
+  Object.entries(byCat).forEach(([cat,items])=>{
+    list.innerHTML+=`<div class="cat-header">📂 ${cat} <span class="badge badge-normal">${items.length}</span></div>`;
+    items.forEach(m=>{
+      const el=document.createElement('div');el.className='exam-item';
+      el.innerHTML=`<div><div class="exam-item-title">📄 ${m.title}</div><div class="exam-item-meta">${m.filename} · ${m.category}</div></div>
+        <button class="btn btn-danger btn-sm delMat" data-id="${m.id}">🗑️ Delete</button>`;
+      el.querySelector('.delMat').onclick=()=>{
+        if(confirm('Delete this material?')){const fd=new FormData();fd.append('id',m.id);fetch('/organizer/delete_material',{method:'POST',body:fd}).then(()=>el.remove());}
+      };
+      list.appendChild(el);
+    });
+  });
+}
+loadMaterials();
+
+// ── Upload Material ──
+document.getElementById('materialForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  const fd=new FormData();
+  fd.append('title',document.getElementById('materialTitle').value);
+  fd.append('category',document.getElementById('materialCategory').value);
+  fd.append('materialFile',document.getElementById('materialFile').files[0]);
+  fetch('/organizer/upload_material',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{
+      if(d.status==='success'){showAlert('uploadAlert','✅ Material uploaded!','success');this.reset();setTimeout(()=>location.reload(),1200);}
+      else showAlert('uploadAlert','❌ Upload failed.','error');
+    });
+});
+
+function showAlert(id,msg,type){
+  const el=document.getElementById(id);
+  el.className='alert alert-'+(type==='success'?'success':'error');
+  el.textContent=msg;el.style.display='block';
+  setTimeout(()=>el.style.display='none',3000);
+}
+
+// ══════════════════════════════════════════════
+//  EXAM MONITOR — REAL-TIME MALPRACTICE TRACKER
+// ══════════════════════════════════════════════
+
+const MONITOR_POLL_MS = 5000;
+let monitorLastSeen = '';
+let monitorSeenIds = new Set();
+let monitorInterval = null;
+let monitorDismissed = false;
+let monitorExamFilter = '';
+let notifPermission = false;
+
+// Event type config
+const EVENT_CFG = {
+  no_face:        { label:'No Face Detected',   color:'#ffb347', bg:'rgba(255,165,0,0.12)',    icon:'👤' },
+  multiple_faces: { label:'Multiple Faces',      color:'#ff6b6b', bg:'rgba(255,77,109,0.12)',   icon:'👥' },
+  look_away:      { label:'Looking Away',        color:'#a78bfa', bg:'rgba(108,99,255,0.12)',   icon:'👁️' },
+  tab_switch:     { label:'Tab Switch',          color:'#ff6b6b', bg:'rgba(255,77,109,0.15)',   icon:'🔴' },
+  camera_denied:  { label:'Camera Denied',       color:'#ff7043', bg:'rgba(255,60,0,0.12)',     icon:'🚫' },
+};
+function evCfg(type) { return EVENT_CFG[type] || { label: type.replace(/_/g,' '), color:'#aaa', bg:'rgba(255,255,255,0.05)', icon:'⚠️' }; }
+
+function formatTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts.replace(' ', 'T'));
+  return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+
+async function fetchMonitorData() {
+  try {
+    let url = '/api/live-monitor?since=' + encodeURIComponent(monitorLastSeen);
+    if (monitorExamFilter) url += '&exam_id=' + monitorExamFilter;
+    const res = await fetch(url);
+    const data = await res.json();
+    document.getElementById('lastRefreshTime').textContent = 'Last refresh: ' + formatTime(data.server_time);
+    populateExamFilter(data.active_exams);
+    renderStats(data.logs, data.summary);
+    renderFlaggedStudents(data.summary);
+    processNewAlerts(data.logs);
+    renderTable(data.logs);
+    if (data.logs.length > 0) monitorLastSeen = data.logs[0].logged_at;
+  } catch(e) { console.error('[Monitor]', e); }
+}
+
+function populateExamFilter(exams) {
+  const sel = document.getElementById('monitorExamFilter');
+  if (sel.options.length > 1) return; // already populated
+  exams.forEach(e => {
+    const o = document.createElement('option');
+    o.value = e.id; o.textContent = e.subject;
+    sel.appendChild(o);
+  });
+}
+
+function renderStats(logs, summary) {
+  const flaggedStudents = new Set(summary.map(s => s.student_id + '-' + s.exam_id)).size;
+  const totalFlags = logs.length;
+  const criticalCount = logs.filter(l => l.event_type === 'multiple_faces' || l.event_type === 'camera_denied').length;
+  const tabSwitches = logs.filter(l => l.event_type === 'tab_switch').length;
+
+  document.getElementById('monitorStats').innerHTML = `
+    <div style="background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:30px;font-weight:800;color:#ff6b6b;">${flaggedStudents}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;">Flagged Students</div>
+    </div>
+    <div style="background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.2);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:30px;font-weight:800;color:#ffb347;">${totalFlags}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;">Total Incidents</div>
+    </div>
+    <div style="background:rgba(255,60,0,0.08);border:1px solid rgba(255,60,0,0.2);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:30px;font-weight:800;color:#ff7043;">${criticalCount}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;">Critical Alerts</div>
+    </div>
+    <div style="background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:30px;font-weight:800;color:#a78bfa;">${tabSwitches}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;">Tab Switches</div>
+    </div>`;
+}
+
+function renderFlaggedStudents(summary) {
+  const el = document.getElementById('flaggedStudentsList');
+  if (!summary.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 20px;background:rgba(99,255,132,0.05);border:1px solid rgba(99,255,132,0.15);border-radius:12px;color:#6bffb8;font-size:14px;">✅ No students flagged</div>`;
+    return;
+  }
+  el.innerHTML = summary.map(s => `
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,77,109,0.15);border:2px solid rgba(255,77,109,0.4);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">🚨</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:#fff;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.name}</div>
+        <div style="font-size:11px;color:var(--text-dim);">@${s.username} · Class ${s.class || '—'}</div>
+        <div style="font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.subject}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:22px;font-weight:800;color:#ff6b6b;">${s.total_flags}</div>
+        <div style="font-size:10px;color:var(--text-dim);">flags</div>
+      </div>
+    </div>`).join('');
+}
+
+function processNewAlerts(logs) {
+  const feed = document.getElementById('liveAlertFeed');
+  const badge = document.getElementById('monitorBadge');
+  let newCount = 0;
+  const newLogs = logs.filter(l => !monitorSeenIds.has(l.id));
+  newLogs.forEach(l => monitorSeenIds.add(l.id));
+
+  if (!newLogs.length) return;
+  newCount = newLogs.length;
+
+  // Update badge
+  if (newCount > 0 && !document.querySelector('[data-tab="exam-monitor"]').classList.contains('active')) {
+    badge.style.display = 'inline-flex';
+    badge.textContent = newCount > 9 ? '9+' : newCount;
+  }
+
+  // Add to feed
+  newLogs.forEach(l => {
+    const cfg = evCfg(l.event_type);
+    const item = document.createElement('div');
+    item.style.cssText = `background:${cfg.bg};border:1px solid ${cfg.color}33;border-radius:10px;padding:10px 14px;animation:slideInRight .3s ease;`;
+    item.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="font-size:14px;">${cfg.icon}</span>
+            <span style="font-weight:700;color:${cfg.color};font-size:13px;">${cfg.label}</span>
+          </div>
+          <div style="font-size:12px;color:#ddd;font-weight:600;">${l.student_name}</div>
+          <div style="font-size:11px;color:var(--text-dim);">@${l.username} · Class ${l.student_class || '—'} · ${l.exam_subject}</div>
+          ${l.detail ? `<div style="font-size:11px;color:#aaa;margin-top:3px;">📝 ${l.detail}</div>` : ''}
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);white-space:nowrap;">${formatTime(l.logged_at)}</div>
+      </div>`;
+    feed.insertBefore(item, feed.firstChild);
+    if (feed.children.length > 30) feed.removeChild(feed.lastChild);
+
+    // Toast notification
+    showMonitorToast(l, cfg);
+
+    // Browser notification
+    if (notifPermission && Notification.permission === 'granted') {
+      new Notification(`🚨 Malpractice: ${cfg.label}`, {
+        body: `${l.student_name} (@${l.username}) — ${l.exam_subject}`,
+        icon: '/static/favicon.ico',
+        tag: 'malpractice-' + l.id
+      });
+    }
+  });
+}
+
+function showMonitorToast(log, cfg) {
+  const container = document.getElementById('monitorToastContainer');
+  const toast = document.createElement('div');
+  toast.style.cssText = `pointer-events:all;background:#1a1a2e;border:1px solid ${cfg.color}55;border-left:4px solid ${cfg.color};border-radius:12px;padding:14px 18px;min-width:280px;max-width:340px;box-shadow:0 8px 32px rgba(0,0,0,.6);animation:slideInRight .3s ease;cursor:pointer;`;
+  toast.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:20px;">${cfg.icon}</span>
+      <div style="flex:1;">
+        <div style="font-weight:700;color:${cfg.color};font-size:13px;margin-bottom:2px;">${cfg.label}</div>
+        <div style="font-size:13px;color:#fff;font-weight:600;">${log.student_name}</div>
+        <div style="font-size:11px;color:#aaa;">@${log.username} · Class ${log.student_class || '—'}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px;">${log.exam_subject} · ${formatTime(log.logged_at)}</div>
+        ${log.snapshot_b64 ? `<button onclick="monitorShowSnap('${log.snapshot_b64}')" style="margin-top:6px;background:rgba(108,99,255,0.2);color:#a78bfa;border:1px solid rgba(108,99,255,0.35);padding:3px 10px;border-radius:6px;font-size:11px;cursor:pointer;">🖼 View Snapshot</button>` : ''}
+      </div>
+      <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#555;font-size:16px;cursor:pointer;padding:0;line-height:1;">✕</button>
+    </div>`;
+  toast.onclick = () => toast.remove();
+  container.appendChild(toast);
+  setTimeout(() => { if (toast.parentElement) toast.remove(); }, 8000);
+}
+
+function renderTable(logs) {
+  const tbody = document.getElementById('monitorTableBody');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:50px;color:var(--text-dim);">
+      <div style="font-size:40px;margin-bottom:10px;">✅</div>
+      <div style="font-size:16px;font-weight:600;color:#6bffb8;">No incidents recorded</div>
+      <div style="font-size:13px;margin-top:4px;">All students are behaving normally.</div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = logs.map((l, idx) => {
+    const cfg = evCfg(l.event_type);
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);${idx === 0 ? 'animation:fadeIn .4s ease;' : ''}">
+      <td style="padding:11px 16px;color:var(--text-dim);font-size:12px;white-space:nowrap;">${formatTime(l.logged_at)}</td>
+      <td style="padding:11px 16px;">
+        <div style="font-weight:700;color:#fff;font-size:13px;">${l.student_name}</div>
+        <div style="font-size:11px;color:var(--text-dim);">@${l.username}</div>
+      </td>
+      <td style="padding:11px 16px;color:#ccc;font-size:12px;">${l.student_class || '—'}</td>
+      <td style="padding:11px 16px;color:#ccc;font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.exam_subject}</td>
+      <td style="padding:11px 16px;">
+        <span style="background:${cfg.bg};color:${cfg.color};padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap;">${cfg.icon} ${cfg.label}</span>
+      </td>
+      <td style="padding:11px 16px;color:#aaa;font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;">${l.detail || '—'}</td>
+      <td style="padding:11px 16px;text-align:center;">
+        ${l.snapshot_b64
+          ? `<button onclick="monitorShowSnap('${l.snapshot_b64}')" style="background:rgba(108,99,255,0.15);color:#a78bfa;border:1px solid rgba(108,99,255,0.3);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;">🖼 View</button>`
+          : `<span style="color:#444;font-size:11px;">—</span>`}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function monitorShowSnap(b64) {
+  document.getElementById('snapImg').src = 'data:image/jpeg;base64,' + b64;
+  document.getElementById('snapModal').style.display = 'flex';
+}
+
+function clearMonitorAlerts() {
+  document.getElementById('liveAlertFeed').innerHTML = '';
+  document.getElementById('monitorBadge').style.display = 'none';
+}
+
+function startMonitor() {
+  if (monitorInterval) return;
+  fetchMonitorData();
+  monitorInterval = setInterval(fetchMonitorData, MONITOR_POLL_MS);
+  // Request browser notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(p => { notifPermission = p === 'granted'; });
+  } else { notifPermission = Notification.permission === 'granted'; }
+}
+
+function stopMonitor() {
+  if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
+}
+
+// Exam filter change
+document.getElementById('monitorExamFilter').addEventListener('change', function() {
+  monitorExamFilter = this.value;
+  monitorLastSeen = '';
+  monitorSeenIds.clear();
+  document.getElementById('liveAlertFeed').innerHTML = '';
+  fetchMonitorData();
+});
+
+// Start/stop monitor on tab switch
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', e => {
+    e.preventDefault();
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    item.classList.add('active');
+    const tabId = item.dataset.tab;
+    document.getElementById(tabId).classList.add('active');
+    if (tabId === 'exam-monitor') {
+      document.getElementById('monitorBadge').style.display = 'none';
+      startMonitor();
+    } else {
+      stopMonitor();
+    }
+  });
+});
+
+// Add CSS animations
+const monitorStyle = document.createElement('style');
+monitorStyle.textContent = `
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.6;transform:scale(1.15)} }
+  @keyframes slideInRight { from{opacity:0;transform:translateX(30px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes fadeIn { from{opacity:0;background:rgba(108,99,255,.12)} to{opacity:1;background:transparent} }
+  #monitorBadge { animation: pulse 1.2s infinite; }
+  #liveAlertFeed::-webkit-scrollbar,#flaggedStudentsList::-webkit-scrollbar{width:4px}
+  #liveAlertFeed::-webkit-scrollbar-thumb,#flaggedStudentsList::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+`;
+document.head.appendChild(monitorStyle);
+
+// Snapshot lightbox (shared with malpractice page)
+if (!document.getElementById('snapModal')) {
+  const modal = document.createElement('div');
+  modal.id = 'snapModal';
+  modal.onclick = () => modal.style.display = 'none';
+  modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;align-items:center;justify-content:center;cursor:pointer;';
+  modal.innerHTML = '<div style="text-align:center;"><img id="snapImg" src="" style="max-width:90vw;max-height:80vh;border-radius:12px;border:2px solid #6c63ff;" alt="Snapshot"><p style="color:#888;font-size:12px;margin-top:10px;">Click anywhere to close</p></div>';
+  document.body.appendChild(modal);
+}
+</script>
+{% endblock %}

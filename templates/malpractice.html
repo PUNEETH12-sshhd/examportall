@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Malpractice Report — {{ exam.subject }}{% endblock %}
+{% block body %}
+<div style="max-width:960px;margin:40px auto;padding:0 20px;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;">
+    <div>
+      <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;">Malpractice Report</div>
+      <h2 style="font-size:24px;font-weight:800;color:#fff;margin:4px 0;">{{ exam.subject }}</h2>
+      <div style="font-size:13px;color:var(--text-dim);">{{ by_student|length }} flagged student(s)</div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <a href="{{ url_for('analytics', exam_id=exam.id) }}" class="btn btn-secondary">📊 Analytics</a>
+      <a href="{{ url_for('organizer') }}" class="btn btn-secondary">← Back</a>
+    </div>
+  </div>
+
+  {% if not by_student %}
+  <div style="text-align:center;padding:80px 20px;background:rgba(99,255,132,0.05);border:1px solid rgba(99,255,132,0.15);border-radius:16px;">
+    <div style="font-size:52px;margin-bottom:12px;">✅</div>
+    <h3 style="color:#6bffb8;font-size:20px;">No Malpractice Detected</h3>
+    <p style="color:var(--text-dim);font-size:14px;">No incidents were flagged for this exam.</p>
+  </div>
+  {% else %}
+
+  <!-- Summary stats -->
+  {% set total_flags = namespace(n=0) %}
+  {% for sid, logs in by_student.items() %}
+    {% set total_flags.n = total_flags.n + logs|length %}
+  {% endfor %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:28px;">
+    <div style="background:rgba(255,77,109,0.08);border:1px solid rgba(255,77,109,0.2);border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:32px;font-weight:800;color:#ff6b6b;">{{ by_student|length }}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Flagged Students</div>
+    </div>
+    <div style="background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.2);border-radius:12px;padding:20px;text-align:center;">
+      <div style="font-size:32px;font-weight:800;color:#ffb347;">{{ total_flags.n }}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Total Incidents</div>
+    </div>
+  </div>
+
+  {% for student_id, logs in by_student.items() %}
+  {% set student = logs[0] %}
+  {% set no_face_count     = logs | selectattr('event_type','equalto','no_face')      | list | length %}
+  {% set multi_face_count  = logs | selectattr('event_type','equalto','multiple_faces')| list | length %}
+  {% set look_away_count   = logs | selectattr('event_type','equalto','look_away')    | list | length %}
+  {% set tab_switch_count  = logs | selectattr('event_type','equalto','tab_switch')   | list | length %}
+  {% set cam_denied_count  = logs | selectattr('event_type','equalto','camera_denied')| list | length %}
+
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;margin-bottom:20px;overflow:hidden;">
+    <!-- Student header -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:rgba(255,77,109,0.05);">
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#fff;">{{ student.student_name }}</div>
+        <div style="font-size:12px;color:var(--text-dim);">@{{ student.username }} · Class {{ student.class }}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        {% if no_face_count %}
+        <span style="background:rgba(255,165,0,0.15);color:#ffb347;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">👤 No Face ×{{ no_face_count }}</span>
+        {% endif %}
+        {% if multi_face_count %}
+        <span style="background:rgba(255,77,109,0.15);color:#ff6b6b;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">👥 Multi Face ×{{ multi_face_count }}</span>
+        {% endif %}
+        {% if look_away_count %}
+        <span style="background:rgba(108,99,255,0.15);color:#a78bfa;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">👁️ Look Away ×{{ look_away_count }}</span>
+        {% endif %}
+        {% if tab_switch_count %}
+        <span style="background:rgba(255,77,109,0.2);color:#ff6b6b;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">🔴 Tab Switch ×{{ tab_switch_count }}</span>
+        {% endif %}
+        {% if cam_denied_count %}
+        <span style="background:rgba(255,60,0,0.15);color:#ff7043;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">🚫 Cam Denied ×{{ cam_denied_count }}</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Incident log table -->
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="padding:10px 16px;text-align:left;color:var(--text-dim);font-weight:600;">#</th>
+            <th style="padding:10px 16px;text-align:left;color:var(--text-dim);font-weight:600;">Event</th>
+            <th style="padding:10px 16px;text-align:left;color:var(--text-dim);font-weight:600;">Detail</th>
+            <th style="padding:10px 16px;text-align:left;color:var(--text-dim);font-weight:600;">Time</th>
+            <th style="padding:10px 16px;text-align:center;color:var(--text-dim);font-weight:600;">Snapshot</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          {% set event_colors = {
+            'no_face':       ('#ffb347','⚠'),
+            'multiple_faces':('#ff6b6b','👥'),
+            'look_away':     ('#a78bfa','👁️'),
+            'tab_switch':    ('#ff6b6b','🔴'),
+            'camera_denied': ('#ff7043','🚫'),
+          } %}
+          {% set ec = event_colors.get(log.event_type, ('#888','•')) %}
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td style="padding:10px 16px;color:var(--text-dim);">{{ loop.index }}</td>
+            <td style="padding:10px 16px;">
+              <span style="color:{{ ec[0] }};font-weight:600;">{{ ec[1] }} {{ log.event_type | replace('_',' ') | title }}</span>
+            </td>
+            <td style="padding:10px 16px;color:#aaa;font-size:12px;">{{ log.detail or '—' }}</td>
+            <td style="padding:10px 16px;color:var(--text-dim);font-size:12px;white-space:nowrap;">{{ log.logged_at }}</td>
+            <td style="padding:10px 16px;text-align:center;">
+              {% if log.snapshot_b64 %}
+              <button onclick="showSnapshot(this)" data-snap="{{ log.snapshot_b64 }}"
+                style="background:rgba(108,99,255,0.15);color:#a78bfa;border:1px solid rgba(108,99,255,0.3);padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;">
+                🖼 View
+              </button>
+              {% else %}
+              <span style="color:#444;font-size:11px;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+</div>
+
+<!-- Snapshot lightbox -->
+<div id="snapModal" onclick="this.style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;align-items:center;justify-content:center;cursor:pointer;">
+  <div style="text-align:center;">
+    <img id="snapImg" src="" style="max-width:90vw;max-height:80vh;border-radius:12px;border:2px solid #6c63ff;" alt="Snapshot">
+    <p style="color:#888;font-size:12px;margin-top:10px;">Click anywhere to close</p>
+  </div>
+</div>
+
+<script>
+function showSnapshot(btn) {
+  const b64 = btn.getAttribute('data-snap');
+  document.getElementById('snapImg').src = 'data:image/jpeg;base64,' + b64;
+  document.getElementById('snapModal').style.display = 'flex';
+}
+</script>
+{% endblock %}

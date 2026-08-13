@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Login — ExamPortal{% endblock %}
+{% block head %}
+<style>
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden;}
+.star{position:absolute;background:#fff;border-radius:50%;animation:tw var(--d,3s) var(--dl,0s) infinite alternate;}
+@keyframes tw{from{opacity:.05;transform:scale(1);}to{opacity:.5;transform:scale(1.6);}}
+.otp-inputs{display:flex;gap:10px;justify-content:center;margin:16px 0;}
+.otp-inputs input{width:48px;height:56px;text-align:center;font-size:24px;font-weight:bold;border-radius:10px;border:2px solid var(--border,#333);background:var(--surface,#1a1a2e);color:var(--text,#eee);}
+.otp-inputs input:focus{outline:none;border-color:#ff6b6b;box-shadow:0 0 0 3px rgba(255,107,107,.2);}
+.otp-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,107,107,.12);color:#ff6b6b;border:1px solid rgba(255,107,107,.3);border-radius:8px;padding:6px 14px;font-size:13px;margin-bottom:14px;}
+</style>
+{% endblock %}
+{% block body %}
+<div class="stars" id="stars"></div>
+<div class="auth-bg">
+  <div class="auth-card">
+    <div class="auth-logo">Exam<span>Portal</span></div>
+    <p class="auth-sub">Online Examination Management System</p>
+    {% if error %}
+    <div class="alert alert-error">&#9888; {{ error }}</div>
+    {% endif %}
+
+    {% if otp_step %}
+    <div style="text-align:center;margin-bottom:8px;">
+      <div class="otp-badge">&#128272; Admin OTP Verification</div>
+    </div>
+    <p style="color:#aaa;font-size:14px;text-align:center;margin-bottom:16px;">
+      A 6-digit OTP has been sent to <strong style="color:#eee;">onlineexamportal69@gmail.com</strong>.<br>Enter it below to continue.
+    </p>
+    <form method="POST" id="otpForm">
+      <input type="hidden" name="step" value="otp_verify">
+      <div class="form-group">
+        <label style="text-align:center;display:block;">One-Time Password</label>
+        <div class="otp-inputs" id="otpBoxes">
+          <input type="text" maxlength="1" class="otp-digit" autofocus inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" inputmode="numeric">
+          <input type="text" maxlength="1" class="otp-digit" inputmode="numeric">
+        </div>
+        <input type="hidden" name="otp" id="otpHidden">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="otpSubmitBtn" disabled>&#10004; Verify OTP</button>
+      <p style="font-size:12px;color:#888;text-align:center;margin-top:12px;">Didn't receive it? <a href="{{ url_for('index') }}" style="color:#6c63ff;">Go back and try again</a></p>
+    </form>
+
+    {% else %}
+    <form method="POST">
+      <input type="hidden" name="step" value="login">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="Enter your username" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div style="position:relative;">
+          <input type="password" name="password" id="loginPassword" placeholder="Enter your password" required style="padding-right:44px;width:100%;box-sizing:border-box;">
+          <button type="button" onclick="togglePwd('loginPassword','loginEye')" tabindex="-1"
+            style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:#888;padding:4px;line-height:1;">
+            <span id="loginEye">&#128065;</span>
+          </button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select name="role" required>
+          <option value="">Select your role&hellip;</option>
+          <option value="admin">&#128737; Admin</option>
+          <option value="organizer">&#128203; Organizer</option>
+          <option value="student">&#127891; Student</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">Sign In &rarr;</button>
+    </form>
+    <div class="auth-footer" style="margin-top:10px;text-align:center;font-size:13px;">
+      <a href="{{ url_for('forgot_password') }}" style="color:#6c63ff;">&#128274; Forgot Password?</a>
+      &nbsp;&nbsp;|&nbsp;&nbsp;
+      <a href="{{ url_for('admin_forgot_password') }}" style="color:#ff6b6b;">&#128737; Admin Reset</a>
+    </div>
+    <div class="auth-footer">New here? <a href="{{ url_for('register') }}">Create an account</a></div>
+    {% endif %}
+  </div>
+</div>
+<script>
+function togglePwd(inputId, eyeId) {
+  const inp = document.getElementById(inputId);
+  const eye = document.getElementById(eyeId);
+  if (inp.type === 'password') { inp.type = 'text'; eye.textContent = '\uD83D\uDE48'; }
+  else { inp.type = 'password'; eye.textContent = '\uD83D\uDC41\uFE0F'; }
+}
+const s=document.getElementById('stars');
+for(let i=0;i<70;i++){const el=document.createElement('div');el.className='star';const sz=Math.random()*2+.5;el.style.cssText='width:'+sz+'px;height:'+sz+'px;top:'+Math.random()*100+'%;left:'+Math.random()*100+'%;--d:'+(Math.random()*4+2).toFixed(1)+'s;--dl:'+(Math.random()*3).toFixed(1)+'s;';s.appendChild(el);}
+const digits = document.querySelectorAll('.otp-digit');
+const hidden = document.getElementById('otpHidden');
+const submitBtn = document.getElementById('otpSubmitBtn');
+if (digits.length) {
+  function updateHidden() {
+    const val = Array.from(digits).map(d=>d.value).join('');
+    if (hidden) hidden.value = val;
+    if (submitBtn) submitBtn.disabled = val.length < 6;
+  }
+  digits.forEach((inp,i) => {
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/[^0-9]/g,'').slice(-1);
+      updateHidden();
+      if (inp.value && i < digits.length-1) digits[i+1].focus();
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key==='Backspace' && !inp.value && i>0) digits[i-1].focus();
+    });
+    inp.addEventListener('paste', e => {
+      e.preventDefault();
+      const text=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'');
+      digits.forEach((d,j)=>{ d.value=text[j]||''; });
+      updateHidden();
+      if (submitBtn) submitBtn.disabled = text.length < 6;
+      if (text.length >= 6) digits[5].focus();
+    });
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}Student Dashboard — ExamPortal{% endblock %}
+{% block body %}
+<div class="dashboard-container">
+  <aside class="sidebar">
+    <div class="sidebar-logo">Exam<span>Portal</span></div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-tab="available-exams">📝 Available Exams</a>
+      <a href="#" class="nav-item" data-tab="my-results">📊 My Results</a>
+      <a href="#" class="nav-item" data-tab="study-materials">📚 Study Materials</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">👤 {{ session.username }}</div>
+      <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm btn-block">Sign Out</a>
+    </div>
+  </aside>
+
+  <main class="main-content">
+
+    <!-- EXAMS TAB -->
+    <section id="available-exams" class="tab-content active">
+      <div class="section-head"><h2>📝 Available Exams</h2></div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon">📋</div><div class="stat-num">{{ exams|length }}</div><div class="stat-label">Total Exams</div></div>
+        <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-num">{{ pass_count }}</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-icon">📈</div><div class="stat-num">{{ avg_pct }}%</div><div class="stat-label">Avg Score</div></div>
+      </div>
+      <div id="examList"></div>
+    </section>
+
+    <!-- RESULTS TAB -->
+    <section id="my-results" class="tab-content">
+      <div class="section-head"><h2>📊 My Results</h2></div>
+      <div id="resultsList"></div>
+    </section>
+
+    <!-- STUDY MATERIALS TAB -->
+    <section id="study-materials" class="tab-content">
+      <div class="section-head">
+        <h2>📚 Study Materials</h2>
+        <p>Browse materials by category.</p>
+      </div>
+      <!-- Category filter buttons -->
+      <div class="cat-filter" id="catFilter">
+        <button class="cat-btn active" data-cat="all">🌐 All</button>
+        {% for cat, mats in materials_by_cat.items() %}
+        <button class="cat-btn" data-cat="{{ cat }}">{{ cat }} <span class="badge badge-normal">{{ mats|length }}</span></button>
+        {% endfor %}
+      </div>
+      <div id="materialsList"></div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+const availableExams = {{ exams | tojson }};
+const studentResults = {{ results | tojson }};
+const attemptedIds   = {{ attempted_ids | tojson }};
+const materialsByCat = {{ materials_by_cat | tojson }};
+
+// ── Tab navigation ──
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click',e=>{
+    e.preventDefault();
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById(item.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Exams ──
+function loadExams(){
+  const list=document.getElementById('examList');
+  if(!availableExams.length){list.innerHTML='<div class="empty-state"><span class="es-icon">📭</span><p>No exams available.</p></div>';return;}
+  list.innerHTML='';
+  availableExams.forEach(e=>{
+    const already=attemptedIds.includes(e.id);
+    const isNormal=!(e.exam_date&&e.start_time&&e.end_time);
+    let statusBadge='',actions='',countdown='';
+    if(e.status==='upcoming'){
+      statusBadge='<span class="badge badge-upcoming">⏳ Upcoming</span>';
+      actions='<button class="btn btn-secondary" disabled>Not Started</button>';
+      countdown=`<div class="countdown-box" data-start="${e.start_ts||0}" data-end="${e.end_ts||0}">
+        <div class="countdown-label">⏳ Starts In</div><div class="countdown-time">…</div></div>`;
+    } else if(e.status==='ended'){
+      statusBadge='<span class="badge badge-ended">🔴 Ended</span>';
+      actions='<button class="btn btn-secondary" disabled>Closed</button>';
+    } else if(already){
+      statusBadge='<span class="badge badge-pass">✅ Attempted</span>';
+      actions='<button class="btn btn-secondary" disabled>Already Attempted</button>';
+    } else {
+      statusBadge=isNormal?'<span class="badge badge-normal">📝 Normal</span>':'<span class="badge badge-live">🟢 Live</span>';
+      actions=`<form method="GET" action="/exam"><input type="hidden" name="exam_id" value="${e.id}"><button type="submit" class="btn btn-primary">Start Exam →</button></form>`;
+    }
+    const meta=isNormal?`Duration: ${e.duration} min`:`${e.exam_date} · ${e.start_time}–${e.end_time} · ${e.duration} min`;
+    list.innerHTML+=`
+    <div class="exam-item">
+      <div style="flex:1;">
+        <div class="exam-item-title">${e.subject}</div>
+        <div class="exam-item-meta">${meta}</div>
+        ${statusBadge}${countdown}
+      </div>
+      <div>${actions}</div>
+    </div>`;
+  });
+  startCountdowns();
+}
+
+function startCountdowns(){
+  document.querySelectorAll('.countdown-box').forEach(cd=>{
+    const span=cd.querySelector('.countdown-time');
+    const startMs=parseInt(cd.dataset.start)*1000;
+    function tick(){
+      const now=Date.now(),d=startMs-now;
+      if(d<=0){span.textContent='Exam Started!';return;}
+      span.textContent=`${Math.floor(d/3600000)}h ${Math.floor(d/60000)%60}m ${Math.floor(d/1000)%60}s`;
+      requestAnimationFrame(tick);
+    }
+    tick();
+  });
+}
+
+// ── Results ──
+function loadResults(){
+  const list=document.getElementById('resultsList');
+  if(!studentResults.length){list.innerHTML='<div class="empty-state"><span class="es-icon">📊</span><p>No results yet.</p></div>';return;}
+  studentResults.forEach(r=>{
+    const pass=parseFloat(r.percentage)>=40;
+    const pct=parseFloat(r.percentage);
+    const date=r.attempt_time?new Date(r.attempt_time).toLocaleString():'N/A';
+    list.innerHTML+=`
+    <div class="exam-item" style="flex-direction:column;align-items:flex-start;">
+      <div style="display:flex;width:100%;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div>
+          <div class="exam-item-title">${r.subject}</div>
+          <div class="exam-item-meta">Attended: ${date}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="badge ${pass?'badge-pass':'badge-fail'}">${pass?'✔ PASS':'✘ FAIL'}</span>
+          <a href="/result?exam_id=${r.exam_id}" class="btn btn-secondary btn-sm">📄 View Card</a>
+        </div>
+      </div>
+      <div style="width:100%;font-size:13px;color:var(--text-dim);margin-bottom:8px;">
+        Score: <strong style="color:#fff;">${r.score} / ${r.total}</strong> &nbsp;·&nbsp;
+        Percentage: <strong style="color:${pass?'var(--green)':'var(--red)'};">${pct}%</strong>
+      </div>
+      <div class="progress-bar" style="width:100%;"><div class="progress-fill" style="width:${pct}%;background:${pass?'linear-gradient(90deg,var(--indigo),var(--teal))':'linear-gradient(90deg,var(--red),#ff8099)'}"></div></div>
+    </div>`;
+  });
+  if(studentResults.length){
+    const avg=(studentResults.reduce((a,r)=>a+parseFloat(r.percentage),0)/studentResults.length).toFixed(1);
+    const passCount=studentResults.filter(r=>parseFloat(r.percentage)>=40).length;
+    list.innerHTML+=`
+    <div class="card" style="margin-top:16px;background:rgba(99,120,255,0.06);">
+      <div style="font-family:var(--font-display);font-weight:700;color:#fff;margin-bottom:12px;">📈 Overall Performance</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center;">
+        <div><div style="font-size:22px;font-weight:800;color:#fff;">${studentResults.length}</div><div style="font-size:12px;color:var(--text-dim);">Taken</div></div>
+        <div><div style="font-size:22px;font-weight:800;color:var(--green);">${passCount}</div><div style="font-size:12px;color:var(--text-dim);">Passed</div></div>
+        <div><div style="font-size:22px;font-weight:800;color:var(--amber);">${avg}%</div><div style="font-size:12px;color:var(--text-dim);">Average</div></div>
+      </div>
+    </div>`;
+  }
+}
+
+// ── Materials by category ──
+let activeCat='all';
+
+function getViewerHTML(m) {
+  const ext = m.filename.split('.').pop().toLowerCase();
+  const fileUrl = `/uploads/${m.filepath}`;
+
+  // PDF — native browser viewer
+  if (ext === 'pdf') {
+    return `<iframe src="${fileUrl}" style="width:100%;height:600px;border:none;border-radius:8px;"></iframe>`;
+  }
+  // Images — inline display
+  if (['png','jpg','jpeg','gif','webp'].includes(ext)) {
+    return `<img src="${fileUrl}" style="max-width:100%;border-radius:8px;" alt="${m.title}">`;
+  }
+  // Video — HTML5 player
+  if (['mp4','webm','ogg'].includes(ext)) {
+    return `<video controls style="width:100%;border-radius:8px;"><source src="${fileUrl}">Your browser does not support video.</video>`;
+  }
+  // Text — fetch and display
+  if (ext === 'txt') {
+    return `<iframe id="txtFrame-${m.id}" src="${fileUrl}" style="width:100%;height:500px;border:1px solid rgba(255,255,255,0.1);border-radius:8px;background:#1a1a2e;color:#fff;"></iframe>`;
+  }
+  // Office docs (docx, doc, ppt, pptx, xls, xlsx) — Google Docs Viewer
+  if (['doc','docx','ppt','pptx','xls','xlsx'].includes(ext)) {
+    const encoded = encodeURIComponent(window.location.origin + fileUrl);
+    return `<div style="background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.3);border-radius:8px;padding:12px 16px;margin-bottom:10px;font-size:13px;color:#ffbb55;">
+      ⚠️ Office files preview via Google Docs Viewer. If preview fails, use the Download button.
+    </div>
+    <iframe src="https://docs.google.com/gview?url=${encoded}&embedded=true"
+      style="width:100%;height:600px;border:none;border-radius:8px;"
+      allowfullscreen></iframe>`;
+  }
+  // Fallback — download prompt
+  return `<div style="text-align:center;padding:40px;color:var(--text-dim);">
+    <div style="font-size:48px;margin-bottom:12px;">📁</div>
+    <p>Preview not supported for <strong>.${ext}</strong> files.</p>
+    <a href="${fileUrl}" download="${m.filename}" class="btn btn-success" style="margin-top:12px;">⬇️ Download to View</a>
+  </div>`;
+}
+
+function openViewer(m) {
+  // Remove existing modal if any
+  const existing = document.getElementById('materialModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'materialModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = `
+    <div style="background:var(--bg-card);border-radius:var(--r-xl);width:100%;max-width:900px;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;background:var(--bg-card);z-index:1;">
+        <div>
+          <div style="font-weight:700;font-size:16px;color:#fff;">${m.title}</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-top:2px;">${m.filename}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="/uploads/${m.filepath}" download="${m.filename}" class="btn btn-success btn-sm">⬇️ Download</a>
+          <button onclick="document.getElementById('materialModal').remove()" class="btn btn-danger btn-sm">✕ Close</button>
+        </div>
+      </div>
+      <div style="padding:20px;">
+        ${getViewerHTML(m)}
+      </div>
+    </div>`;
+  // Close on backdrop click
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
+}
+
+function loadMaterials(cat='all'){
+  const list=document.getElementById('materialsList');
+  list.innerHTML='';
+  const filtered=cat==='all'?materialsByCat:Object.fromEntries(Object.entries(materialsByCat).filter(([k])=>k===cat));
+  if(!Object.keys(filtered).length){list.innerHTML='<div class="empty-state"><span class="es-icon">📁</span><p>No materials in this category.</p></div>';return;}
+  Object.entries(filtered).forEach(([catName,items])=>{
+    list.innerHTML+=`<div class="cat-header">📂 ${catName} <span class="badge badge-normal">${items.length}</span></div>`;
+    items.forEach(m=>{
+      const ext=m.filename.split('.').pop().toLowerCase();
+      const icon={'pdf':'📕','doc':'📄','docx':'📄','ppt':'📊','pptx':'📊','txt':'📝','png':'🖼️','jpg':'🖼️','jpeg':'🖼️','gif':'🖼️','mp4':'🎬','zip':'🗜️'}[ext]||'📁';
+      // Determine if this type can be previewed in-app
+      const previewable = ['pdf','png','jpg','jpeg','gif','webp','mp4','txt','doc','docx','ppt','pptx','xls','xlsx'].includes(ext);
+      const matData = JSON.stringify(m).replace(/"/g,'&quot;');
+      list.innerHTML+=`
+      <div class="exam-item">
+        <div>
+          <div class="exam-item-title">${icon} ${m.title}</div>
+          <div class="exam-item-meta">${m.filename} · ${catName}</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          ${previewable
+            ? `<button onclick='openViewer(${matData})' class="btn btn-secondary btn-sm">👁️ View</button>`
+            : `<a href="/uploads/${m.filepath}" target="_blank" class="btn btn-secondary btn-sm">👁️ Open</a>`
+          }
+          <a href="/uploads/${m.filepath}" download="${m.filename}" class="btn btn-success btn-sm">⬇️ Download</a>
+        </div>
+      </div>`;
+    });
+  });
+}
+
+// Category filter buttons
+document.querySelectorAll('.cat-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    loadMaterials(btn.dataset.cat);
+  });
+});
+
+loadExams(); loadResults(); loadMaterials();
+</script>
+{% endblock %}
